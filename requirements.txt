@@ -1,0 +1,2 @@
+adafruit_minimqtt
+adafruit_scd4x
