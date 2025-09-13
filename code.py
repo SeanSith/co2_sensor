@@ -6,6 +6,8 @@ import wifi
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
 import socketpool
 import neopixel
+import feathers3
+import gc
 
 PUSH_INTERVAL = int(os.getenv("PUSH_INTERVAL", 60))  # seconds
 
@@ -55,7 +57,7 @@ while True:
 
         print(f"Connecting to MQTT broker {mqtt_broker}...", end=" ")
         try:
-            mqtt_client.connect()
+            mqtt_client.reconnect()
             pixel[0] = (0, 255, 0)  # Green on WiFi+MQTT success
             try:
                 # Wait for sensor data to be ready
@@ -65,11 +67,20 @@ while True:
                 co2 = scd4x.CO2
                 temp = scd4x.temperature
                 humidity = scd4x.relative_humidity
+                # Read battery voltage (adjust for your board if needed)
+                battery_voltage = feathers3.get_battery_voltage()
+                is_charging = 1 if feathers3.get_vbus_present() else 0
+                free_memory = gc.mem_free()
+                uptime = time.monotonic()
+
                 # Publish to MQTT
-                payload = '{{"co2": {}, "temperature": {:.2f}, "humidity": {:.2f}}}'.format(co2, temp, humidity)
+                payload = '{{"co2": {}, "temperature": {:.2f}, "humidity": {:.2f}, "voltage": {:.2f}, "charging": {}, "free_memory": {}, "uptime": {}}}'.format(
+                    co2, temp, humidity, battery_voltage, is_charging, free_memory, uptime)
                 try:
                     mqtt_client.publish(mqtt_topic, payload)
                     print(f"Published to {mqtt_topic}: {payload}")
+                    time.sleep(1)  # Allow some time for the message to be sent
+                    mqtt_client.deinit()  # Disconnect after publishing
                     pixel[0] = (0, 0, 0)  # Turn off only if everything was successful
                 except Exception as e:
                     print(f"[ERROR] MQTT publish to {mqtt_topic} failed!")
