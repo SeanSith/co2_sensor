@@ -6,9 +6,8 @@
 #
 
 # Import required libraries
-import time
 import board
-from digitalio import DigitalInOut, Direction, Pull
+from digitalio import DigitalInOut, Direction
 from analogio import AnalogIn
 
 # Init Blink LED

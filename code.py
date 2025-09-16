@@ -16,28 +16,30 @@ i2c = board.STEMMA_I2C()
 scd4x = adafruit_scd4x.SCD4X(i2c)
 scd4x.start_low_periodic_measurement()  # Start once, keep running
 
+# MQTT configuration
+mqtt_broker =   os.getenv("MQTT_BROKER")
+mqtt_port =     int(os.getenv("MQTT_PORT", 1883))
+mqtt_username = os.getenv("MQTT_USERNAME")
+mqtt_password = os.getenv("MQTT_PASSWORD")
+sensor_name =   os.getenv('SENSOR_NAME')
+mqtt_topic =    f"sensors/environmental/{sensor_name}"
+
 # NeoPixel setup
 pixel = neopixel.NeoPixel(board.NEOPIXEL, 1)
 pixel.brightness = 0.2
 
 while True:
-    # Enable WiFi radio before connecting
-    wifi.radio.enabled = True
+    pixel[0] = (0, 0, 0)  # Reset status LED
+
     # Connect to WiFi
+    wifi.radio.enabled = True
     print(f"Connecting to {os.getenv('WIFI_SSID')}...", end=" ")
-    wifi.radio.hostname = os.getenv('SENSOR_NAME')
+    wifi.radio.hostname = sensor_name
     try:
         wifi.radio.connect(os.getenv("WIFI_SSID"), os.getenv("WIFI_PASSWORD"))
         print("connected!")
-        pixel[0] = (0, 0, 0)  # Off on success
         # MQTT Setup
         pool = socketpool.SocketPool(wifi.radio)
-        mqtt_broker = os.getenv("MQTT_BROKER")
-        mqtt_port = int(os.getenv("MQTT_PORT", 1883))
-        mqtt_username = os.getenv("MQTT_USERNAME")
-        mqtt_password = os.getenv("MQTT_PASSWORD")
-        sensor_name = os.getenv('SENSOR_NAME')
-        mqtt_topic = f"sensors/environmental/{sensor_name}"
         mqtt_client = MQTT.MQTT(
             broker=mqtt_broker,
             port=mqtt_port,
@@ -64,18 +66,24 @@ while True:
                 while not scd4x.data_ready:
                     time.sleep(1)
 
-                co2 = scd4x.CO2
-                temp = scd4x.temperature
-                humidity = scd4x.relative_humidity
-                # Read battery voltage (adjust for your board if needed)
-                battery_voltage = feathers3.get_battery_voltage()
-                is_charging = 1 if feathers3.get_vbus_present() else 0
-                free_memory = gc.mem_free()
-                uptime = time.monotonic()
-
                 # Publish to MQTT
-                payload = '{{"co2": {}, "temperature": {:.2f}, "humidity": {:.2f}, "voltage": {:.2f}, "charging": {}, "free_memory": {}, "uptime": {}}}'.format(
-                    co2, temp, humidity, battery_voltage, is_charging, free_memory, uptime)
+                payload = '{{' \
+                    '"co2":{}' \
+                    ',"temperature":{:.2f}' \
+                    ',"humidity":{:.2f}' \
+                    ',"voltage":{:.2f}' \
+                    ',"charging":{}' \
+                    ',"free_memory":{}' \
+                    ',"uptime":{}' \
+                '}}'.format(
+                    scd4x.CO2,
+                    scd4x.temperature,
+                    scd4x.relative_humidity,
+                    feathers3.get_battery_voltage(),
+                    1 if feathers3.get_vbus_present() else 0,
+                    gc.mem_free(),
+                    time.monotonic()
+                )
                 try:
                     mqtt_client.publish(mqtt_topic, payload)
                     print(f"Published to {mqtt_topic}: {payload}")
@@ -87,6 +95,7 @@ while True:
                     print(f"[ERROR] Payload: {payload}")
                     print(e)
                     pixel[0] = (255, 0, 0)  # Red on failure
+                del payload  # Free up memory
             except Exception as e:
                 print()
                 print(e)
@@ -99,6 +108,8 @@ while True:
         print("failed!")
         print(e)
         pixel[0] = (255, 0, 0)  # Red on failure
+
+    gc.collect()  # Collect garbage to free up memory as we had a memory leak somewhere
     # Wait for next push interval
     print(f"Waiting {PUSH_INTERVAL} seconds before next push...")
     wifi.radio.enabled = False  # Disable WiFi radio to save power
