@@ -9,12 +9,18 @@ import neopixel
 import feathers3
 import gc
 
+def get_atmospheric_pressure():
+    # Placeholder function to return a fixed atmospheric pressure value
+    # Replace this with actual sensor reading code if available
+    return 1013.25  # Standard atmospheric pressure at sea level in hPa
+
 PUSH_INTERVAL = int(os.getenv("PUSH_INTERVAL", 60))  # seconds
 
 # Sensor setup
 i2c = board.STEMMA_I2C()
 scd4x = adafruit_scd4x.SCD4X(i2c)
-scd4x.start_low_periodic_measurement()  # Start once, keep running
+scd4x.altitude = int(os.getenv("ALTITUDE", 0))  # Altitude in meters
+scd4x.set_ambient_pressure = get_atmospheric_pressure()  # Set ambient pressure in hPa
 
 # MQTT configuration
 mqtt_broker =   os.getenv("MQTT_BROKER")
@@ -62,9 +68,7 @@ while True:
             mqtt_client.reconnect()
             pixel[0] = (0, 255, 0)  # Green on WiFi+MQTT success
             try:
-                # Wait for sensor data to be ready
-                while not scd4x.data_ready:
-                    time.sleep(1)
+                scd4x.measure_single_shot()
 
                 # Publish to MQTT
                 payload = '{{' \
