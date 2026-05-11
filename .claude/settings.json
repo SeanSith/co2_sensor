@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./tools/deploy.sh)",
+      "Bash(./tools/monitor.py *)"
+    ]
+  }
+}

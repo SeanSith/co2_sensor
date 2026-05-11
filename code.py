@@ -9,9 +9,11 @@ import neopixel
 import feathers3
 import gc
 import alarm
-import microcontroller  # used for nvm (factory reset sentinel)
+import microcontroller  # nvm (factory reset sentinel) + watchdog
+import watchdog
 
 PUSH_INTERVAL = int(os.getenv("PUSH_INTERVAL", 60))  # seconds
+WATCHDOG_TIMEOUT = PUSH_INTERVAL + 90  # sleep interval + active work budget
 FACTORY_RESET_DONE = 0xAB  # sentinel stored in NVM after first-boot reset
 
 # Cache credentials at module level — avoids allocating new strings each iteration
@@ -48,6 +50,9 @@ def on_connect(mqtt_client, userdata, flags, rc):
 
 def on_disconnect(mqtt_client, userdata, rc):
     print("Disconnected from MQTT Broker!")
+
+microcontroller.watchdog.timeout = WATCHDOG_TIMEOUT
+microcontroller.watchdog.mode = watchdog.WatchDogMode.RESET
 
 while True:
     pixel[0] = (0, 0, 0)  # Reset status LED
@@ -122,6 +127,11 @@ while True:
 
     gc.collect()
     wifi.radio.enabled = False  # Disable WiFi radio to save power
+
+    # Feed watchdog once per cycle before sleeping. Timeout covers the full
+    # sleep duration plus a work budget, so no deinit/re-arm needed.
+    microcontroller.watchdog.feed()
+
     print(f"Sleeping {PUSH_INTERVAL}s — press BOOT to arm factory reset...")
 
     # Light sleep until timer expires or BOOT button is pressed.

@@ -10,34 +10,24 @@ There is no build step. CircuitPython executes `code.py` directly from the devic
 
 ## Deployment
 
-Copy files directly to the `CIRCUITPY` drive that appears when the FeatherS3 is connected via USB:
+Use the deploy script — do not use `cp` directly:
 
 ```bash
-# Copy main firmware
-cp code.py /Volumes/CIRCUITPY/code.py
-
-# Copy board helper
-cp feathers3.py /Volumes/CIRCUITPY/feathers3.py
-
-# Copy credentials/config (never commit this file — it's gitignored)
-cp settings.toml /Volumes/CIRCUITPY/settings.toml
+./tools/deploy.sh
 ```
 
-The device resets and reruns `code.py` automatically when files are saved to the drive.
+Copies `code.py` and `feathers3.py` to `/Volumes/CIRCUITPY/`. The device resets and reruns `code.py` automatically.
 
 ## Monitoring
 
-Use a serial console to see debug output and the REPL:
+Use the monitor script — do not use `screen` or invoke via `python3`:
 
 ```bash
-# macOS — find the port first
-ls /dev/cu.usbmodem*
-
-# Then connect (115200 baud)
-screen /dev/cu.usbmodem* 115200
+./tools/monitor.py                   # run until Ctrl-C
+./tools/monitor.py --duration 90     # run for 90 seconds
 ```
 
-Ctrl+C interrupts the running script; Ctrl+D soft-reboots the device.
+Streams serial output to stdout and `/tmp/circuitpy.log`.
 
 ## Configuration
 

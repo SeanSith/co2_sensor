@@ -29,14 +29,3 @@ The current pipeline has four hops: **Sensor → Mosquitto → Telegraf → Prom
 - Remove Telegraf and Mosquitto containers/services
 
 *Staleness caveat:* The Pushgateway retains the last pushed value indefinitely. If the sensor goes offline, Prometheus continues seeing stale metrics. Mitigate by alerting on `push_time_seconds{job="co2_sensor"} > PUSH_INTERVAL * 3` rather than on the metric value itself. Alternatively, the sensor can send a DELETE request to the Pushgateway before sleeping (clears the metric so Prometheus sees no data instead of stale data) — but this only helps if the sensor shuts down cleanly.
-
-## Low Priority
-
-### Watchdog / Hardware Reset on Hang
-CircuitPython supports a software watchdog via `microcontroller.watchdog`. If the device ever hangs mid-cycle (e.g., WiFi connect blocks forever), a watchdog reset would recover it automatically without manual power cycling.
-```python
-import microcontroller
-microcontroller.watchdog.timeout = 30  # seconds
-microcontroller.watchdog.mode = microcontroller.watchdog.WatchDogMode.RESET
-# feed it each successful cycle: microcontroller.watchdog.feed()
-```
