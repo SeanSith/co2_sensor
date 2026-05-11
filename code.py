@@ -9,7 +9,7 @@ import neopixel
 import feathers3
 import gc
 import alarm
-import microcontroller
+import microcontroller  # used for nvm (factory reset sentinel)
 
 PUSH_INTERVAL = int(os.getenv("PUSH_INTERVAL", 60))  # seconds
 FACTORY_RESET_DONE = 0xAB  # sentinel stored in NVM after first-boot reset
