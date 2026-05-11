@@ -1,20 +1,5 @@
 # TODO
 
-## High Priority
-
-### Sensor Stuck Reporting Same Value
-The SCD4X's **Automatic Self-Calibration (ASC)** assumes the sensor sees ~400 ppm (fresh outdoor air) at least once per week. Running continuously indoors (typically 600–2000 ppm) causes ASC to drift and eventually clamp readings to a fixed value.
-
-**Recommended fix:** Disable ASC.
-```python
-scd4x.self_calibration_enabled = False
-```
-The sensor will still read correctly — it just won't auto-correct its baseline. Without ASC, baseline drift is slow and the factory calibration holds for years indoors.
-
-If ASC is kept enabled, the device would need periodic exposure to outdoor air (~400 ppm), which the user wants to avoid.
-
-**Also worth adding:** A stale-data watchdog that tracks the previous CO2 reading and flags (or resets) if N consecutive readings are identical — a reliable indicator of a frozen sensor.
-
 ## Medium Priority
 
 ### Simplify Infrastructure: Drop Mosquitto + Telegraf, Use Prometheus Pushgateway

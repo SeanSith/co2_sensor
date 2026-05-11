@@ -8,8 +8,11 @@ import socketpool
 import neopixel
 import feathers3
 import gc
+import alarm
+import microcontroller
 
 PUSH_INTERVAL = int(os.getenv("PUSH_INTERVAL", 60))  # seconds
+FACTORY_RESET_DONE = 0xAB  # sentinel stored in NVM after first-boot reset
 
 # Cache credentials at module level — avoids allocating new strings each iteration
 wifi_ssid = os.getenv("WIFI_SSID")
@@ -18,7 +21,14 @@ wifi_password = os.getenv("WIFI_PASSWORD")
 # Sensor setup
 i2c = board.STEMMA_I2C()
 scd4x = adafruit_scd4x.SCD4X(i2c)
-scd4x.altitude = int(os.getenv("ALTITUDE", 0))  # Altitude in meters
+
+if microcontroller.nvm[0] != FACTORY_RESET_DONE:
+    print("Running factory reset...")
+    scd4x.factory_reset()
+    microcontroller.nvm[0] = FACTORY_RESET_DONE
+
+scd4x.altitude = int(os.getenv("ALTITUDE", 0))  # re-applied after possible reset
+scd4x.self_calibration_enabled = False           # ASC off — always-indoor deployment
 
 # MQTT configuration
 mqtt_broker =   os.getenv("MQTT_BROKER")
@@ -111,6 +121,19 @@ while True:
             del pool
 
     gc.collect()
-    print(f"Waiting {PUSH_INTERVAL} seconds before next push...")
     wifi.radio.enabled = False  # Disable WiFi radio to save power
-    time.sleep(PUSH_INTERVAL)
+    print(f"Sleeping {PUSH_INTERVAL}s — press BOOT to arm factory reset...")
+
+    # Light sleep until timer expires or BOOT button is pressed.
+    # PinAlarm wakes the CPU without polling, preserving battery.
+    pin_alarm = alarm.pin.PinAlarm(pin=board.BUTTON, value=False, pull=True)
+    time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + PUSH_INTERVAL)
+    triggered = alarm.light_sleep_until_alarms(pin_alarm, time_alarm)
+
+    if isinstance(triggered, alarm.pin.PinAlarm):
+        # Clear the NVM sentinel so factory_reset() runs on next power cycle
+        microcontroller.nvm[0] = 0
+        pixel[0] = (0, 0, 255)  # Blue: reset armed
+        print("Factory reset armed — power cycle to apply.")
+        time.sleep(2)
+        pixel[0] = (0, 0, 0)
