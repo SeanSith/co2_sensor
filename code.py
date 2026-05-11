@@ -16,6 +16,10 @@ def get_atmospheric_pressure():
 
 PUSH_INTERVAL = int(os.getenv("PUSH_INTERVAL", 60))  # seconds
 
+# Cache credentials at module level — avoids allocating new strings each iteration
+wifi_ssid = os.getenv("WIFI_SSID")
+wifi_password = os.getenv("WIFI_PASSWORD")
+
 # Sensor setup
 i2c = board.STEMMA_I2C()
 scd4x = adafruit_scd4x.SCD4X(i2c)
@@ -27,23 +31,33 @@ mqtt_broker =   os.getenv("MQTT_BROKER")
 mqtt_port =     int(os.getenv("MQTT_PORT", 1883))
 mqtt_username = os.getenv("MQTT_USERNAME")
 mqtt_password = os.getenv("MQTT_PASSWORD")
-sensor_name =   os.getenv('SENSOR_NAME')
+sensor_name =   os.getenv("SENSOR_NAME")
 mqtt_topic =    f"sensors/environmental/{sensor_name}"
 
 # NeoPixel setup
 pixel = neopixel.NeoPixel(board.NEOPIXEL, 1)
 pixel.brightness = 0.2
 
+# Callbacks at module level — avoids reallocating function objects each iteration
+def on_connect(mqtt_client, userdata, flags, rc):
+    print("connected!")
+
+def on_disconnect(mqtt_client, userdata, rc):
+    print("Disconnected from MQTT Broker!")
+
 while True:
     pixel[0] = (0, 0, 0)  # Reset status LED
+    pool = None
+    mqtt_client = None
 
-    # Connect to WiFi
-    wifi.radio.enabled = True
-    print(f"Connecting to {os.getenv('WIFI_SSID')}...", end=" ")
-    wifi.radio.hostname = sensor_name
     try:
-        wifi.radio.connect(os.getenv("WIFI_SSID"), os.getenv("WIFI_PASSWORD"))
+        # Connect to WiFi
+        wifi.radio.enabled = True
+        print(f"Connecting to {wifi_ssid}...", end=" ")
+        wifi.radio.hostname = sensor_name
+        wifi.radio.connect(wifi_ssid, wifi_password)
         print("connected!")
+
         # MQTT Setup
         pool = socketpool.SocketPool(wifi.radio)
         mqtt_client = MQTT.MQTT(
@@ -53,68 +67,56 @@ while True:
             password=mqtt_password,
             socket_pool=pool,
         )
-
-        def connect(mqtt_client, userdata, flags, rc):
-            print("connected!")
-
-        def disconnect(mqtt_client, userdata, rc):
-            print("Disconnected from MQTT Broker!")
-
-        mqtt_client.on_connect = connect
-        mqtt_client.on_disconnect = disconnect
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_disconnect = on_disconnect
 
         print(f"Connecting to MQTT broker {mqtt_broker}...", end=" ")
-        try:
-            mqtt_client.reconnect()
-            pixel[0] = (0, 255, 0)  # Green on WiFi+MQTT success
-            try:
-                scd4x.measure_single_shot()
+        mqtt_client.reconnect()
+        pixel[0] = (0, 255, 0)  # Green on WiFi+MQTT connected
 
-                # Publish to MQTT
-                payload = '{{' \
-                    '"co2":{}' \
-                    ',"temperature":{:.2f}' \
-                    ',"humidity":{:.2f}' \
-                    ',"voltage":{:.2f}' \
-                    ',"charging":{}' \
-                    ',"free_memory":{}' \
-                    ',"uptime":{}' \
-                '}}'.format(
-                    scd4x.CO2,
-                    scd4x.temperature,
-                    scd4x.relative_humidity,
-                    feathers3.get_battery_voltage(),
-                    1 if feathers3.get_vbus_present() else 0,
-                    gc.mem_free(),
-                    time.monotonic()
-                )
-                try:
-                    mqtt_client.publish(mqtt_topic, payload)
-                    print(f"Published to {mqtt_topic}: {payload}")
-                    time.sleep(1)  # Allow some time for the message to be sent
-                    mqtt_client.deinit()  # Disconnect after publishing
-                    pixel[0] = (0, 0, 0)  # Turn off only if everything was successful
-                except Exception as e:
-                    print(f"[ERROR] MQTT publish to {mqtt_topic} failed!")
-                    print(f"[ERROR] Payload: {payload}")
-                    print(e)
-                    pixel[0] = (255, 0, 0)  # Red on failure
-                del payload  # Free up memory
-            except Exception as e:
-                print()
-                print(e)
-                pixel[0] = (255, 0, 0)  # Red on failure
-        except Exception as e:
-            print("failed!")
-            print(e)
-            pixel[0] = (255, 0, 0)  # Red on failure
+        scd4x.measure_single_shot()
+
+        payload = '{{' \
+            '"co2":{}' \
+            ',"temperature":{:.2f}' \
+            ',"humidity":{:.2f}' \
+            ',"voltage":{:.2f}' \
+            ',"charging":{}' \
+            ',"free_memory":{}' \
+            ',"uptime":{}' \
+        '}}'.format(
+            scd4x.CO2,
+            scd4x.temperature,
+            scd4x.relative_humidity,
+            feathers3.get_battery_voltage(),
+            1 if feathers3.get_vbus_present() else 0,
+            gc.mem_free(),
+            time.monotonic()
+        )
+        mqtt_client.publish(mqtt_topic, payload)
+        print(f"Published to {mqtt_topic}: {payload}")
+        del payload
+        time.sleep(1)  # Allow time for the message to transmit
+        pixel[0] = (0, 0, 0)  # Off on full success
+
     except Exception as e:
-        print("failed!")
         print(e)
-        pixel[0] = (255, 0, 0)  # Red on failure
+        pixel[0] = (255, 0, 0)  # Red on any failure
 
-    gc.collect()  # Collect garbage to free up memory as we had a memory leak somewhere
-    # Wait for next push interval
+    finally:
+        # Always clean up socket resources, regardless of which step failed.
+        # deinit() closes the socket; del releases the Python objects so GC
+        # can reclaim their memory on the next gc.collect().
+        if mqtt_client is not None:
+            try:
+                mqtt_client.deinit()
+            except Exception:
+                pass
+            del mqtt_client
+        if pool is not None:
+            del pool
+
+    gc.collect()
     print(f"Waiting {PUSH_INTERVAL} seconds before next push...")
     wifi.radio.enabled = False  # Disable WiFi radio to save power
     time.sleep(PUSH_INTERVAL)
