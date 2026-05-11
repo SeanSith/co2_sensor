@@ -126,7 +126,7 @@ while True:
 
     # Light sleep until timer expires or BOOT button is pressed.
     # PinAlarm wakes the CPU without polling, preserving battery.
-    pin_alarm = alarm.pin.PinAlarm(pin=board.BUTTON, value=False, pull=True)
+    pin_alarm = alarm.pin.PinAlarm(pin=board.IO0, value=False, pull=True)  # IO0 = BOOT; press during sleep to arm factory reset
     time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + PUSH_INTERVAL)
     triggered = alarm.light_sleep_until_alarms(pin_alarm, time_alarm)
 
