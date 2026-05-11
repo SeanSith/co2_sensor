@@ -10,9 +10,8 @@ import feathers3
 import gc
 
 def get_atmospheric_pressure():
-    # Placeholder function to return a fixed atmospheric pressure value
-    # Replace this with actual sensor reading code if available
-    return 1013.25  # Standard atmospheric pressure at sea level in hPa
+    altitude = int(os.getenv("ALTITUDE", 0))
+    return 1013.25 * (1 - 2.25577e-5 * altitude) ** 5.25588
 
 PUSH_INTERVAL = int(os.getenv("PUSH_INTERVAL", 60))  # seconds
 
@@ -24,7 +23,7 @@ wifi_password = os.getenv("WIFI_PASSWORD")
 i2c = board.STEMMA_I2C()
 scd4x = adafruit_scd4x.SCD4X(i2c)
 scd4x.altitude = int(os.getenv("ALTITUDE", 0))  # Altitude in meters
-scd4x.set_ambient_pressure = get_atmospheric_pressure()  # Set ambient pressure in hPa
+scd4x.set_ambient_pressure(int(get_atmospheric_pressure()))  # Set ambient pressure in hPa
 
 # MQTT configuration
 mqtt_broker =   os.getenv("MQTT_BROKER")
