@@ -5,12 +5,12 @@
         "reportShadowedImports": "none"
     },
     "python.analysis.extraPaths": [
-        "/Users/sean/.vscode/extensions/joedevivo.vscode-circuitpython-0.2.0-darwin-arm64/boards/0x303A/0x80D7",
+        "/Users/sean/.vscode/extensions/joedevivo.vscode-circuitpython-0.2.0-darwin-arm64/boards/0x303A/0x1001",
         "/Users/sean/.vscode/extensions/joedevivo.vscode-circuitpython-0.2.0-darwin-arm64/stubs",
-        "/Users/sean/Library/Application Support/Code/User/globalStorage/joedevivo.vscode-circuitpython/bundle/20260508/adafruit-circuitpython-bundle-py-20260508/lib"
+        "/Users/sean/Library/Application Support/Code/User/globalStorage/joedevivo.vscode-circuitpython/bundle/20260729/adafruit-circuitpython-bundle-py-20260729/lib"
     ],
-    "circuitpython.board.version": "9.2.9",
+    "circuitpython.board.version": "10.2.1",
     "circuitpython.board.vid": "0x303A",
-    "circuitpython.board.pid": "0x80D7",
+    "circuitpython.board.pid": "0x1001",
     "python.analysis.autoImportCompletions": true
 }

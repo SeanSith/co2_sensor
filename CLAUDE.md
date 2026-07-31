@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A CircuitPython firmware project for the **Unexpected Maker FeatherS3** (ESP32S3), which reads CO2, temperature, and humidity from an **Adafruit SCD4X** sensor and publishes the data via MQTT. The board runs **CircuitPython 9.2.9**.
+A CircuitPython firmware project for the **Unexpected Maker FeatherS3** (ESP32S3), which reads CO2, temperature, and humidity from an **Adafruit SCD4X** sensor and publishes the data via MQTT. The board runs **CircuitPython 10.x** — check `CIRCUITPY/boot_out.txt` for the exact version currently installed.
 
 There is no build step. CircuitPython executes `code.py` directly from the device's flash filesystem.
 
@@ -43,9 +43,42 @@ All runtime configuration lives in `settings.toml` (gitignored, never committed)
 
 A template `settings.toml` must be created manually on each new device.
 
+ASC (Automatic Self-Calibration) is disabled every boot in `code.py` — see README.md § Sensor Calibration for why an always-indoor SCD4X needs this.
+
 ## Monitoring & Observability
 
 A Prometheus collector is exposed at `http://prometheus.smithpeople.org` (LAN access only — not reachable from the public internet). It scrapes the MQTT-published metrics from this sensor. Use it to correlate readings over time when debugging stuck-data or drift issues.
+
+## Upgrading Firmware & Libraries
+
+Check the installed version via `CIRCUITPY/boot_out.txt` and compare against the latest stable release for `unexpectedmaker_feathers3` at [circuitpython.org](https://circuitpython.org/board/unexpectedmaker_feathers3/). CircuitPython only ships point releases within the current major version, so "latest" may mean a major-version jump (e.g. 9.x → 10.x) — check that release's changelog on the `adafruit/circuitpython` GitHub releases page for breaking changes before jumping.
+
+### Flashing new firmware
+
+Prefer `esptool` over the UF2 drag-and-drop dance:
+
+```bash
+pip3 install --user esptool
+python3 -m esptool --port /dev/cu.usbmodem* flash-id                     # confirms flash size
+python3 -m esptool --port /dev/cu.usbmodem* write-flash 0x0 <firmware>.bin
+```
+
+The FeatherS3's native USB-Serial/JTAG interface lets esptool auto-reset into the ROM bootloader with **zero button presses** — far more reliable than the manual double-tap/BOOT+RESET gestures.
+
+Pitfalls hit in practice:
+- **Don't press RESET manually right after an esptool flash.** esptool already triggers its own reset; a manual press soon after can read as TinyUF2's "double-reset" gesture and drop the board into its UF2 bootloader (a drive like `UFTHRS3BOOT` appears) instead of booting the new firmware.
+- **If that happens, it's not stuck** — copy the same `.uf2` file onto that bootloader drive. The board reboots the instant it finishes receiving the payload, so `cp` reporting an I/O error mid-copy is expected, not a failure.
+- **Major-version bumps on ESP32-S2/S3 boards with 4MB flash** need a TinyUF2 bootloader update (≥0.33.0) first, or the UF2 load silently fails. This board has 16MB flash (confirm via `flash-id` or the bootloader drive's `INFO_UF2.TXT`), so that requirement doesn't apply here — but check flash size before a major bump on any board.
+- Shell commands may run sandboxed and not see freshly mounted volumes or full USB device info — `system_profiler`/`ioreg` can return empty even when the Mac sees the device fine. If a flash looks stuck, confirm the actual state in Finder rather than trusting shell inspection.
+- Back up `settings.toml`, `code.py`, and `feathers3.py` off the device before flashing. The user filesystem partition should survive a firmware flash, but it's cheap insurance.
+
+### Updating libraries
+
+`.mpy` bytecode is tied to the CircuitPython **major** version — grab the bundle build matching the new major version specifically (the [bundle release](https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/latest) ships `9.x` and `10.x` builds side by side), not just whatever's newest. After swapping `CIRCUITPY/lib/`, mirror the same files into the repo's local (gitignored) `lib/` so the dev environment matches.
+
+### After any upgrade
+
+Redeploy via `./tools/deploy.sh`, then watch `./tools/monitor.py` through at least one full sensor cycle before calling it done.
 
 ## Task Management
 
@@ -53,11 +86,9 @@ When completing any work that addresses an item in `TODO.md`, remove that item f
 
 ## Known Issues
 
-See `TODO.md` for the full list. The two active problems:
+See `TODO.md` for planned work. One active problem:
 
-1. **Memory leak** — free memory trends downward over long runtimes. Root cause is function objects (`connect`/`disconnect` callbacks) being allocated inside the `while True` loop, plus incomplete cleanup of `pool` and `mqtt_client` on failure paths.
-
-2. **Sensor gets stuck** — the SCD4X's Automatic Self-Calibration (ASC) assumes weekly exposure to ~400 ppm outdoor air. Running permanently indoors causes it to drift and eventually report a fixed value. Disabling ASC (`scd4x.self_calibration_enabled = False`) is the intended fix for an always-indoor deployment.
+- **Memory leak** — free memory still trends downward slowly over long runtimes (confirmed via the Prometheus collector). Commit `a641a46` (hoisting `connect`/`disconnect` callbacks to module level, guaranteeing `pool`/`mqtt_client` cleanup in `finally`) reduced but did not eliminate it — root cause is still unidentified.
 
 ## Architecture
 
@@ -77,11 +108,7 @@ Each iteration of the `while True` loop:
 
 ### NeoPixel status LED
 
-| Color | Meaning |
-|-------|---------|
-| Green | WiFi + MQTT connected successfully |
-| Red | Any failure (WiFi, MQTT connect, sensor read, or publish) |
-| Off | Sleeping between readings |
+See README.md § Status LED for the color meanings table.
 
 ### Board helper (`feathers3.py`)
 
@@ -97,4 +124,4 @@ Pre-compiled `.mpy` files installed from the Adafruit CircuitPython bundle. Giti
 - `adafruit_scd4x` — SCD40/SCD41 CO2 sensor driver
 - `neopixel` — NeoPixel control
 
-To update libraries, download the matching bundle for CircuitPython 9.x from [circuitpython.org/libraries](https://circuitpython.org/libraries).
+See § Upgrading Firmware & Libraries above for how to update these.

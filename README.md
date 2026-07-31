@@ -12,7 +12,7 @@ CircuitPython firmware for the [Unexpected Maker FeatherS3](https://feathers3.io
 
 ### 1. Install libraries
 
-Download the [Adafruit CircuitPython bundle](https://circuitpython.org/libraries) matching CircuitPython 9.x and copy these to `CIRCUITPY/lib/`:
+Download the [Adafruit CircuitPython bundle](https://circuitpython.org/libraries) matching your installed CircuitPython major version (check `CIRCUITPY/boot_out.txt`) and copy these to `CIRCUITPY/lib/`:
 
 - `adafruit_minimqtt/`
 - `adafruit_scd4x.mpy`
@@ -37,21 +37,18 @@ ALTITUDE = 0       # meters above sea level
 ### 3. Deploy firmware
 
 ```bash
-cp code.py /Volumes/CIRCUITPY/code.py
-cp feathers3.py /Volumes/CIRCUITPY/feathers3.py
+./tools/deploy.sh
 ```
 
 The device resets and starts running immediately.
 
 ## Monitoring
 
-Connect a serial console to see debug output:
-
 ```bash
-screen /dev/cu.usbmodem* 115200
+./tools/monitor.py
 ```
 
-Ctrl+C interrupts the script; Ctrl+D soft-reboots.
+Streams serial output to stdout and `/tmp/circuitpy.log`. Ctrl-C stops monitoring (the device keeps running).
 
 ## Status LED
 
